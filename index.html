@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>倒立振子で学ぶ 状態フィードバック制御シミュレータ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // MathJax Configuration
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            max-height: 50vh;
+        }
+        #animation-container {
+            border-left: 1px dashed #999;
+            border-right: 1px dashed #999;
+        }
+        #cart {
+            position: absolute;
+            bottom: 50px;
+            width: 100px;
+            height: 40px;
+            background-color: #334155; /* slate-700 */
+            border-radius: 5px;
+            transform: translateX(-50%);
+        }
+        #pole {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            width: 10px;
+            height: 150px;
+            background-color: #f59e0b; /* amber-500 */
+            border-radius: 5px;
+            transform-origin: bottom center;
+            transform: translateX(-50%);
+        }
+        #target-marker-line {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 2px;
+            height: 100%;
+            background-color: rgba(34, 197, 94, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-stone-50 text-stone-800">
+
+    <header class="bg-white shadow-md">
+        <div class="container mx-auto px-6 py-4">
+            <h1 class="text-2xl font-bold text-blue-700">倒立振子で学ぶ 状態フィードバック制御シミュレータ</h1>
+            <p class="text-stone-600 mt-1">倒れない棒「倒立振子」を通じて、状態フィードバック制御を体験しよう。</p>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-8">
+
+        <section id="concept" class="mb-12 bg-white p-6 rounded-lg shadow">
+            <h2 class="text-2xl font-semibold border-b-2 border-blue-200 pb-2 mb-4">1. 倒立振子と状態フィードバック制御</h2>
+            <div class="flex flex-col md:flex-row gap-8">
+                <div class="md:w-1/2">
+                    <p class="mb-4">
+                        <b>倒立振子</b>は、台車の上に乗った不安定なポールを、台車を左右に動かすことで倒れないようにバランスを取るシステムです。これは、ロケットの姿勢制御や二足歩行ロボットなど、様々な技術の基礎となるモデルです。
+                    </p>
+                    <p class="mb-4">
+                        <b>状態フィードバック制御</b>は、システムの「状態」をすべて利用して制御する方法です。倒立振子の場合、以下の4つの状態を使います。
+                        <ul class="list-disc list-inside bg-blue-50 p-4 rounded-lg my-4">
+                            <li>$x$: 台車の現在位置</li>
+                            <li>$\dot{x}$: 台車の現在の速度</li>
+                            <li>$\theta$: ポールの現在の角度</li>
+                            <li>$\dot{\theta}$: ポールが倒れる現在の角速度</li>
+                        </ul>
+                        これらの状態に、それぞれ「どれくらい重視するか」を表す<b>フィードバックゲイン ($k_1, k_2, k_3, k_4$)</b> を掛けて足し合わせることで、台車を動かす力 $u$ を決定します。
+                    </p>
+                </div>
+                 <div class="md:w-1/2 bg-stone-50 p-4 rounded-lg">
+                    <h3 class="font-semibold text-lg mb-2">制御則と状態方程式</h3>
+                    <p>台車に加える力 $u$ は以下の式で計算されます。</p>
+                    <div class="text-center my-3 p-2 bg-white rounded">
+                        $ u = - (k_1 x + k_2 \dot{x} + k_3 \theta + k_4 \dot{\theta}) = -K\mathbf{x} $
+                    </div>
+                    <p>このシミュレータは、以下の線形化された状態方程式に基づいています。</p>
+                    <div class="text-center my-3 p-2 bg-white rounded">
+                        $ \dot{\mathbf{x}} = A\mathbf{x} + B u $
+                    </div>
+                    <p>ここで、$\mathbf{x}$ は状態ベクトル、$A$ はシステム行列、$B$ は入力行列です。</p>
+                    <div class="text-sm overflow-x-auto">
+                    $$
+                    \mathbf{x} =
+                    \begin{bmatrix} x \\ \dot{x} \\ \theta \\ \dot{\theta} \end{bmatrix}
+                    , \ 
+                    A = 
+                    \begin{bmatrix} 0 & 1 & 0 & 0 \\ 0 & 0 & a_{23} & 0 \\ 0 & 0 & 0 & 1 \\ 0 & 0 & a_{43} & 0 \end{bmatrix}
+                    , \ 
+                    B = 
+                    \begin{bmatrix} 0 \\ b_2 \\ 0 \\ b_4 \end{bmatrix}
+                    $$
+                    </div>
+                     <p class="text-xs text-stone-500 mt-2">※$a_{23}, a_{43}, b_2, b_4$ は質量や長さなどの物理パラメータから決まる定数です。$A$行列の$a_{43}$が正の値を持つため、このシステムは本来不安定です。</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="simulation" class="mb-12">
+            <h2 class="text-2xl font-semibold border-b-2 border-blue-200 pb-2 mb-4">2. シミュレーションで体験する</h2>
+            <p class="mb-6">
+                4つのフィードバックゲインを調整して、ポールを倒さずに目標位置（中央）へ台車を移動させる、最高のスコアを目指しましょう！
+            </p>
+            <div class="flex flex-col lg:flex-row gap-8">
+                <!-- Visuals -->
+                <div class="lg:flex-1 bg-white p-6 rounded-lg shadow-lg">
+                     <h3 class="text-xl font-semibold mb-4 text-center">応答グラフ</h3>
+                    <div class="chart-container">
+                        <canvas id="responseChart"></canvas>
+                    </div>
+                     <div class="mt-2 text-base sm:text-lg text-center flex flex-wrap justify-center items-center gap-x-4 gap-y-1">
+                        <div>時間: <span id="elapsed-time-value" class="font-bold w-12 inline-block text-left">0.0</span> s</div>
+                        <div>角度: <span id="angle-value" class="font-bold text-amber-600 w-20 inline-block text-left">+0.00</span> deg</div>
+                        <div>位置: <span id="position-value" class="font-bold text-slate-600 w-20 inline-block text-left">+0.00</span> m</div>
+                        <div>操作力: <span id="control-input-value" class="font-bold text-red-600 w-20 inline-block text-left">+0.0</span> N</div>
+                    </div>
+                     <h3 class="text-xl font-semibold my-4 text-center">倒立振子の動き</h3>
+                     <div id="animation-container" class="relative w-full h-64 mx-auto bg-sky-100 rounded-lg overflow-hidden border">
+                        <div id="target-marker-line"></div>
+                        <div id="cart">
+                            <div id="pole"></div>
+                        </div>
+                        <div class="absolute bottom-1 left-1 text-xs text-stone-500">-5m</div>
+                        <div class="absolute bottom-1 right-1 text-xs text-stone-500">+5m</div>
+                     </div>
+                     <button id="run-button" class="w-full max-w-sm mx-auto mt-6 bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-300 block">
+                        シミュレーション実行
+                    </button>
+                </div>
+                <!-- Controls -->
+                <div class="lg:w-96 bg-white p-6 rounded-lg shadow-lg">
+                    <h3 class="text-xl font-semibold mb-4">パラメータ設定</h3>
+                    <div id="score-info" class="mb-4 p-3 bg-blue-50 rounded-lg text-center">
+                        <div class="text-sm text-stone-500">総合スコア</div>
+                        <div id="score-value" class="text-2xl font-bold text-blue-700">0</div>
+                        <div id="score-result" class="mt-2 text-sm font-bold text-blue-800 h-6"></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label for="k3-slider" class="font-medium text-amber-700">角度ゲイン (k3):</label>
+                            <input type="number" id="k3-input" min="-100" max="100" step="1" value="-29.1" class="w-full rounded border-stone-300 text-center mt-1">
+                            <input type="range" id="k3-slider" min="-100" max="100" step="1" value="-29.1" class="w-full mt-1">
+                        </div>
+                        <div>
+                            <label for="k4-slider" class="font-medium text-amber-700">角速度ゲイン (k4):</label>
+                            <input type="number" id="k4-input" min="-50" max="50" step="0.5" value="-5.0" class="w-full rounded border-stone-300 text-center mt-1">
+                            <input type="range" id="k4-slider" min="-50" max="50" step="0.5" value="-5.0" class="w-full mt-1">
+                        </div>
+                        <div>
+                            <label for="k1-slider" class="font-medium text-slate-700">位置ゲイン (k1):</label>
+                            <input type="number" id="k1-input" min="-50" max="50" step="0.5" value="1.0" class="w-full rounded border-stone-300 text-center mt-1">
+                            <input type="range" id="k1-slider" min="-50" max="50" step="0.5" value="1.0" class="w-full mt-1">
+                        </div>
+                        <div>
+                            <label for="k2-slider" class="font-medium text-slate-700">速度ゲイン (k2):</label>
+                            <input type="number" id="k2-input" min="-50" max="50" step="0.5" value="2.5" class="w-full rounded border-stone-300 text-center mt-1">
+                            <input type="range" id="k2-slider" min="-50" max="50" step="0.5" value="2.5" class="w-full mt-1">
+                        </div>
+                    </div>
+                    
+                    <hr class="my-6">
+
+                    <div class="bg-stone-100 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2">外乱設定 (ポールを突く)</h4>
+                         <p class="text-sm text-stone-600 mb-2">シミュレーション中に、指定したタイミングでポールに衝撃を加えます。</p>
+                        <div class="flex justify-between items-center">
+                            <button id="disturbance-toggle-btn" class="px-4 py-2 rounded-lg text-white font-semibold w-full">
+                                外乱: <span id="disturbance-state-text">OFF</span>
+                            </button>
+                        </div>
+                        <div class="text-sm text-stone-600 mt-2 text-center">
+                            <span>衝撃: 0.5 rad/s</span>,
+                            <span>時間: 5.0 s 地点</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="mb-12">
+            <button id="toggle-scenarios-btn" class="w-full text-left font-semibold text-xl text-blue-800 p-3 bg-blue-100 rounded-lg hover:bg-blue-200 transition">
+                シナリオを開く ▼
+            </button>
+            <div id="scenarios-container" class="hidden mt-4">
+                <p class="mb-6">
+                    ボタンを押して、典型的な応答パターンを観察してみましょう。
+                </p>
+                <div class="flex flex-wrap gap-4 mb-6">
+                    <button data-k1="0" data-k2="0" data-k3="0" data-k4="0" class="scenario-btn">シナリオ1: 無制御</button>
+                    <button data-k1="0" data-k2="0" data-k3="35" data-k4="0" class="scenario-btn">シナリオ2: 角度のみ (不安定)</button>
+                    <button data-k1="0" data-k2="0" data-k3="-29" data-k4="-5" class="scenario-btn">シナリオ3: 角度安定化</button>
+                    <button data-k1="1" data-k2="2.5" data-k3="-29.1" data-k4="-5" class="scenario-btn">シナリオ4: 最適制御 (目標へ)</button>
+                    <button data-k1="1" data-k2="2.5" data-k3="-29.1" data-k4="-5" data-disturbance="on" class="scenario-btn">シナリオ5: 最適制御 + 外乱</button>
+                    <button data-k1="2" data-k2="3.5" data-k3="-35" data-k4="-7" data-disturbance="off" class="scenario-btn">シナリオ6: 高ゲイン (高速)</button>
+                </div>
+                <div id="scenario-explanation" class="bg-blue-50 p-6 rounded-lg border border-blue-200 min-h-[100px]">
+                    <h4 class="font-bold text-lg text-blue-800 mb-2">解説</h4>
+                    <p>上のボタンを押して、各シナリオの解説を表示します。</p>
+                </div>
+            </div>
+        </section>
+    </main>
+    
+    <footer class="bg-white mt-12 py-6 border-t">
+        <div class="container mx-auto px-6 text-center text-stone-500">
+            <p>&copy; 2025 Interactive Control Simulator. All Rights Reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const controls = {
+            k1: { slider: document.getElementById('k1-slider'), input: document.getElementById('k1-input') },
+            k2: { slider: document.getElementById('k2-slider'), input: document.getElementById('k2-input') },
+            k3: { slider: document.getElementById('k3-slider'), input: document.getElementById('k3-input') },
+            k4: { slider: document.getElementById('k4-slider'), input: document.getElementById('k4-input') },
+        };
+
+        const runButton = document.getElementById('run-button');
+        const scenarioButtons = document.querySelectorAll('.scenario-btn');
+        const chartCanvas = document.getElementById('responseChart');
+        const cartEl = document.getElementById('cart');
+        const poleEl = document.getElementById('pole');
+        const disturbanceToggleBtn = document.getElementById('disturbance-toggle-btn');
+        const disturbanceStateText = document.getElementById('disturbance-state-text');
+        const explanationDiv = document.getElementById('scenario-explanation');
+        const toggleScenariosBtn = document.getElementById('toggle-scenarios-btn');
+        const scenariosContainer = document.getElementById('scenarios-container');
+
+        let responseChart = null;
+        let animationFrameId = null;
+        let isDisturbanceOn = false;
+
+        const explanations = {
+            'default': { title: '解説', text: '上のボタンを押して、各シナリオの解説を表示します。' },
+            's1': { title: 'シナリオ1: 無制御', text: '全てのゲインが0なので、台車は全く動きません。ポールは初期の傾きからそのまま倒れてしまいます。' },
+            's2': { title: 'シナリオ2: 角度のみ (不安定)', text: 'ブレーキ役の角速度ゲイン(k4)がない、あるいは不適切な角度ゲイン(k3)だと、制御が過剰になり、ポールは激しく振動したり、逆に倒れるのを加速させてしまいます。' },
+            's3': { title: 'シナリオ3: 角度安定化', text: '角度(k3)と角速度(k4)を適切に使うと、ポールの振動を抑え、垂直に立てることができます。しかし、台車の位置は考慮していないので、あらぬ方向へ移動してしまいます。' },
+            's4': { title: 'シナリオ4: 最適制御 (目標へ)', text: '4つのゲイン全てをバランス良く設定すると、ポールを立てたまま、台車を目標位置（中央）へ滑らかに移動させることができます。これが状態フィードバック制御の力です。' },
+            's5': { title: 'シナリオ5: 最適制御 + 外乱', text: '途中で外乱（ポールを突く衝撃）が加わっても、制御が働き、体勢を立て直して目標位置に戻ろうとします。ゲインの値によっては倒れてしまうこともあります。' },
+            's6': { title: 'シナリオ6: 高ゲイン (高速)', text: 'ゲインを全体的に高くすると、目標位置への反応は速くなりますが、少し動きが急になったり、外乱に弱くなることがあります。速さと安定性はトレードオフの関係にあります。' }
+        };
+
+        function setupControlBindings(key) {
+            const { slider, input } = controls[key];
+            slider.addEventListener('input', (e) => input.value = parseFloat(e.target.value).toFixed(1));
+            input.addEventListener('change', (e) => {
+                let value = parseFloat(e.target.value);
+                const min = parseFloat(slider.min);
+                const max = parseFloat(slider.max);
+                if (isNaN(value)) value = slider.value;
+                slider.value = Math.max(min, Math.min(max, value));
+                input.value = parseFloat(slider.value).toFixed(1);
+            });
+        }
+        
+        function updateDisturbanceButton() {
+            if (isDisturbanceOn) {
+                disturbanceToggleBtn.classList.remove('bg-stone-400');
+                disturbanceToggleBtn.classList.add('bg-orange-500');
+                disturbanceStateText.textContent = 'ON';
+            } else {
+                disturbanceToggleBtn.classList.add('bg-stone-400');
+                disturbanceToggleBtn.classList.remove('bg-orange-500');
+                disturbanceStateText.textContent = 'OFF';
+            }
+        }
+
+        function runSimulation() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
+            const k1 = parseFloat(controls.k1.input.value);
+            const k2 = parseFloat(controls.k2.input.value);
+            const k3 = parseFloat(controls.k3.input.value);
+            const k4 = parseFloat(controls.k4.input.value);
+            
+            // Physical parameters
+            const M = 1.0;  // Cart mass (kg)
+            const m = 0.2;  // Pole mass (kg)
+            const l = 0.5;  // Half pole length (m)
+            const g = 9.8;  // Gravity (m/s^2)
+            const I = (1/12) * m * (2*l)**2; // Pole inertia about its CoM
+
+            // Initial state
+            let x = -4.0;       // Initial cart position (m)
+            let x_dot = 0.0;    // Initial cart velocity (m/s)
+            let theta = 0.2;    // Initial pole angle (rad, approx 11.5 deg)
+            let theta_dot = 0.0;// Initial pole angular velocity (rad/s)
+
+            const dt = 0.01;
+            const duration = 15.0;
+            const steps = duration / dt;
+            const failAngle = Math.PI / 2; // Fail at 90 degrees
+
+            const timeData = [], angleData = [], positionData = [], controlInputData = [];
+            let isFailed = false;
+            let timeStable = 0;
+            let totalControlVariation = 0;
+            let lastF = 0;
+
+            for (let i = 0; i <= steps; i++) {
+                const currentTime = i * dt;
+                
+                if (Math.abs(theta) > failAngle || Math.abs(x) > 5.5) {
+                    isFailed = true;
+                    break; 
+                }
+                
+                timeData.push(currentTime);
+                angleData.push(theta * 180 / Math.PI); // Convert to deg for display
+                positionData.push(x);
+
+                if (Math.abs(theta) < 0.1 && Math.abs(x) < 0.1) {
+                    timeStable += dt;
+                }
+
+                // State-feedback control law
+                const F = - (k1 * x + k2 * x_dot + k3 * theta + k4 * theta_dot);
+                controlInputData.push(F);
+                if (i > 0) {
+                    totalControlVariation += Math.abs(F - lastF);
+                }
+                lastF = F;
+
+                // Disturbance: Impulse on pole angular velocity
+                if (isDisturbanceOn && Math.abs(currentTime - 5.0) < dt/2) {
+                    theta_dot += 0.5; // rad/s kick
+                }
+                
+                // ** CORRECTED Linearized equations of motion **
+                const D = (M + m) * (I + m * l * l) - (m * l)**2;
+                
+                const x_ddot     = ( (I + m * l * l) * F + m * m * l * l * g * theta) / D;
+                const theta_ddot = ( -m * l * F - m * g * l * (M + m) * theta ) / D;
+
+                // Euler integration
+                x_dot += x_ddot * dt;
+                x += x_dot * dt;
+                theta_dot += theta_ddot * dt;
+                theta += theta_dot * dt;
+            }
+            
+            // Scoring
+            const scoreEl = document.getElementById('score-value');
+            const scoreResultEl = document.getElementById('score-result');
+            if(isFailed) {
+                scoreEl.textContent = "0";
+                scoreResultEl.textContent = `失敗... ポールが倒れたかコースアウトしました`;
+            } else {
+                const stabilityScore = Math.min(100, (timeStable / 5.0) * 100);
+                const positionError = Math.abs(positionData[positionData.length -1]);
+                const errorPenalty = Math.min(50, positionError * 20);
+                const oscillationPenalty = Math.min(50, totalControlVariation / 100);
+                const finalScore = Math.max(0, Math.round(stabilityScore - errorPenalty - oscillationPenalty));
+                scoreEl.textContent = finalScore;
+                scoreResultEl.textContent = `(安定:${Math.round(stabilityScore)} - 位置減点:${Math.round(errorPenalty)} - 振動減点:${Math.round(oscillationPenalty)})`;
+            }
+            
+            updateChart(timeData, angleData, positionData);
+            startAnimation(timeData, positionData, angleData, controlInputData);
+        }
+
+        function startAnimation(timeData, positionData, angleData, controlInputData) {
+            if (!timeData || timeData.length === 0) return;
+            const duration = timeData[timeData.length - 1] * 1000;
+            let startTime = null;
+
+            const angleValueEl = document.getElementById('angle-value');
+            const positionValueEl = document.getElementById('position-value');
+            const controlValueEl = document.getElementById('control-input-value');
+            const elapsedTimeEl = document.getElementById('elapsed-time-value');
+            
+            function animate(timestamp) {
+                if (!startTime) startTime = timestamp;
+                const elapsedTime = timestamp - startTime;
+                const currentSimTime = elapsedTime / 1000;
+                const dataIndex = Math.min(Math.floor(currentSimTime / 0.01), positionData.length - 1);
+                
+                const currentPos = positionData[dataIndex];
+                const currentAngle = angleData[dataIndex];
+                
+                // Position update (-5m to +5m maps to 0% to 100%)
+                const posPercent = (currentPos + 5) / 10 * 100;
+                cartEl.style.left = `${posPercent}%`;
+
+                // Angle update
+                poleEl.style.transform = `translateX(-50%) rotate(${currentAngle}deg)`;
+                
+                // Value displays
+                angleValueEl.textContent = (currentAngle >= 0 ? '+' : '') + currentAngle.toFixed(2);
+                positionValueEl.textContent = (currentPos >= 0 ? '+' : '') + currentPos.toFixed(2);
+                controlValueEl.textContent = (controlInputData[dataIndex] >= 0 ? '+' : '') + controlInputData[dataIndex].toFixed(1);
+                elapsedTimeEl.textContent = currentSimTime.toFixed(1);
+
+                if (elapsedTime < duration) {
+                    animationFrameId = requestAnimationFrame(animate);
+                } else {
+                     elapsedTimeEl.textContent = (duration/1000).toFixed(1);
+                }
+            }
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function updateChart(time, angle, position) {
+            if (responseChart) responseChart.destroy();
+            const ctx = chartCanvas.getContext('2d');
+            responseChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: time,
+                    datasets: [
+                        { label: 'ポールの角度 (deg)', data: angle, borderColor: 'rgb(245, 158, 11)', borderWidth: 2, pointRadius: 0, yAxisID: 'y' },
+                        { label: '台車の位置 (m)', data: position, borderColor: 'rgb(51, 65, 85)', borderWidth: 2, pointRadius: 0, yAxisID: 'y1' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: '時間 (s)' } },
+                        y: { type: 'linear', position: 'left', title: { display: true, text: '角度 (deg)' }, min: -30, max: 30 },
+                        y1: { type: 'linear', position: 'right', title: { display: true, text: '位置 (m)' }, grid: { drawOnChartArea: false }, min: -5, max: 5 }
+                    },
+                    plugins: { 
+                        legend: { display: true, position: 'top' },
+                        tooltip: { mode: 'index', intersect: false } 
+                    },
+                    animation: { duration: 0 }
+                }
+            });
+        }
+        
+        function updateExplanation(scenarioKey) {
+            const content = explanations[scenarioKey];
+            explanationDiv.innerHTML = `<h4 class="font-bold text-lg text-blue-800 mb-2">${content.title}</h4><p>${content.text}</p>`;
+        }
+        
+        // --- Event Listeners ---
+        Object.keys(controls).forEach(key => setupControlBindings(key));
+        runButton.addEventListener('click', runSimulation);
+
+        disturbanceToggleBtn.addEventListener('click', () => {
+            isDisturbanceOn = !isDisturbanceOn;
+            updateDisturbanceButton();
+        });
+
+        toggleScenariosBtn.addEventListener('click', () => {
+            const isHidden = scenariosContainer.classList.toggle('hidden');
+            toggleScenariosBtn.textContent = isHidden ? 'シナリオを開く ▼' : 'シナリオを閉じる ▲';
+        });
+
+        scenarioButtons.forEach((button, index) => {
+            button.classList.add('bg-white', 'border', 'border-stone-300', 'px-4', 'py-2', 'rounded-lg', 'hover:bg-stone-100', 'hover:border-blue-500', 'transition');
+            button.addEventListener('click', () => {
+                isDisturbanceOn = (button.dataset.disturbance === 'on');
+                updateDisturbanceButton();
+                
+                Object.keys(controls).forEach(key => {
+                    if (button.dataset[key] !== undefined) {
+                        const value = button.dataset[key];
+                        controls[key].slider.value = value;
+                        controls[key].input.value = parseFloat(value).toFixed(1);
+                    }
+                });
+                
+                runSimulation();
+                updateExplanation(`s${index + 1}`);
+            });
+        });
+        
+        // --- Initial Load ---
+        function setInitialValues() {
+            // Set initial values based on "Optimal Control" scenario
+            const initialGains = { k1: "1.0", k2: "2.5", k3: "-29.1", k4: "-5.0" };
+            Object.keys(initialGains).forEach(key => {
+                controls[key].input.value = initialGains[key];
+                controls[key].slider.value = initialGains[key];
+            });
+        }
+
+        updateDisturbanceButton();
+        setInitialValues();
+        runSimulation();
+        updateExplanation('default');
+    });
+    </script>
+</body>
+</html>
+
